@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>短視頻分析戰情室 V2.5.1 - Google Drive 同步版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', 'Microsoft JhengHei', sans-serif; background-color: #f8fafc; }
+        .gradient-header { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); }
+        .glass-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(10px); border: 1px solid #e2e8f0; }
+        .progress-ring { transition: stroke-dashoffset 0.6s ease-in-out; }
+        .verdict-badge { padding: 4px 12px; border-radius: 9999px; font-weight: 700; font-size: 13px; }
+        .verdict-high { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+        .verdict-mid { background: #fef3c7; color: #d97706; border: 1px solid #fcd34d; }
+        .verdict-low { background: #dcfce7; color: #16a34a; border: 1px solid #86efac; }
+        .tab-active { border-bottom: 3px solid #4f46e5; color: #4f46e5; }
+        @keyframes shimmer { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        .analyzing-pulse { animation: shimmer 1.5s infinite; }
+        .sync-loading { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* Modal Animation */
+        .modal-enter { animation: modalFadeIn 0.3s ease-out forwards; }
+        @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800">
+    <div class="max-w-6xl mx-auto p-4 md:p-8">
+        <!-- Header -->
+        <header class="gradient-header rounded-3xl p-8 mb-8 text-white shadow-xl relative overflow-hidden">
+            <div class="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
+                <div>
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="bg-indigo-600 p-2 rounded-xl shadow-lg">
+                            <i data-lucide="activity" class="w-6 h-6"></i>
+                        </div>
+                        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight italic">AI INSIGHT <span class="text-indigo-400">V2.5.1</span></h1>
+                    </div>
+                    <p class="text-indigo-200 text-sm font-medium opacity-80">目標雲端：edzhai066@gmail.com (Google Drive)</p>
+                </div>
+                
+                <div class="flex flex-col gap-2 w-full md:w-auto">
+                    <div class="flex items-center bg-white/10 rounded-xl p-1 border border-white/20 backdrop-blur-md">
+                        <input type="password" id="api-key-input" placeholder="Gemini API Key" 
+                            class="bg-transparent border-none text-white placeholder:text-white/40 px-3 py-2 outline-none text-xs w-full md:w-56" />
+                        <button id="save-key-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-lg">儲存</button>
+                    </div>
+                    <div id="user-status" class="text-[10px] text-indigo-300 text-right italic font-medium flex items-center justify-end gap-1">
+                        系統就緒 <i data-lucide="check-circle" class="w-3 h-3 text-emerald-400"></i>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- Left Panel -->
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-card rounded-3xl p-6 shadow-sm">
+                    <div class="flex border-b border-slate-100 mb-6">
+                        <button id="tab-text" class="flex-1 py-3 text-xs font-black tab-active transition-all uppercase tracking-wider">文字分析</button>
+                        <button id="tab-url" class="flex-1 py-3 text-xs font-black text-slate-400 uppercase tracking-wider">影片連結</button>
+                        <button id="tab-history" class="flex-1 py-3 text-xs font-black text-slate-400 flex items-center justify-center gap-1 uppercase tracking-wider">
+                            <i data-lucide="history" class="w-3 h-3"></i>歷史
+                        </button>
+                    </div>
+
+                    <div id="panel-input" class="space-y-4">
+                        <div id="text-container">
+                            <textarea id="input-text" placeholder="在此貼上影片逐字稿或文字內容..." 
+                                class="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none resize-none text-sm leading-relaxed transition-all"></textarea>
+                        </div>
+                        <div id="url-container" class="hidden">
+                            <div class="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 mb-2">
+                                <label class="block text-[10px] font-black text-indigo-600 mb-2 uppercase tracking-widest">YouTube URL</label>
+                                <input type="text" id="input-url" placeholder="https://www.youtube.com/watch?v=..." 
+                                    class="w-full p-3 bg-white border border-indigo-200 rounded-xl outline-none text-sm shadow-inner">
+                            </div>
+                        </div>
+                        
+                        <button id="analyze-btn" class="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-lg transition-all active:scale-95">
+                            <i data-lucide="zap" class="w-6 h-6"></i> 立即執行鑑定
+                        </button>
+                        
+                        <div class="flex items-center justify-between px-1">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="sync-drive-toggle" checked class="rounded text-indigo-600">
+                                <label for="sync-drive-toggle" class="text-[10px] text-slate-500 font-bold uppercase tracking-wider cursor-pointer">自動同步 Google Drive</label>
+                            </div>
+                            <div id="sync-status" class="hidden text-[10px] font-bold text-indigo-500 flex items-center gap-1">
+                                <i data-lucide="refresh-cw" class="w-3 h-3 sync-loading"></i> 同步中...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="panel-history" class="hidden space-y-4">
+                        <div id="history-list" class="max-h-[400px] overflow-y-auto space-y-2 pr-2 italic text-xs text-slate-400 text-center py-10">
+                            尚未有歷史紀錄
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel -->
+            <div class="lg:col-span-8">
+                <div id="empty-state" class="h-full flex flex-col items-center justify-center py-20 glass-card rounded-3xl border-dashed border-2">
+                    <div class="bg-slate-100 p-6 rounded-full mb-6 text-slate-300">
+                        <i data-lucide="layout-dashboard" class="w-16 h-16"></i>
+                    </div>
+                    <p class="text-slate-400 font-bold text-center px-8 leading-relaxed">儀表板就緒<br><span class="text-[10px] font-normal opacity-60">數據將自動儲存於 edzhai066@gmail.com</span></p>
+                </div>
+
+                <div id="loading-state" class="hidden h-full flex flex-col items-center justify-center py-20 glass-card rounded-3xl">
+                    <div class="w-20 h-20 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                    <p class="mt-8 text-indigo-600 font-black analyzing-pulse text-lg">AI 多維度稽核中...</p>
+                </div>
+
+                <div id="result-dashboard" class="hidden space-y-6">
+                    <!-- Stat Rings -->
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div class="glass-card p-4 rounded-3xl flex flex-col items-center">
+                            <span class="text-[10px] font-black text-slate-400 mb-3 uppercase">AI 創作率</span>
+                            <div class="relative flex items-center justify-center">
+                                <svg class="w-16 h-16 -rotate-90"><circle cx="32" cy="32" r="28" stroke="#f1f5f9" stroke-width="6" fill="none"></circle><circle id="circle-ai" cx="32" cy="32" r="28" stroke="#6366f1" stroke-width="6" fill="none" stroke-dasharray="175.9" stroke-dashoffset="175.9" class="progress-ring"></circle></svg>
+                                <span id="val-ai" class="absolute text-sm font-black">0%</span>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4 rounded-3xl flex flex-col items-center">
+                            <span class="text-[10px] font-black text-slate-400 mb-3 uppercase">事實可靠度</span>
+                            <div class="relative flex items-center justify-center">
+                                <svg class="w-16 h-16 -rotate-90"><circle cx="32" cy="32" r="28" stroke="#f1f5f9" stroke-width="6" fill="none"></circle><circle id="circle-fact" cx="32" cy="32" r="28" stroke="#10b981" stroke-width="6" fill="none" stroke-dasharray="175.9" stroke-dashoffset="175.9" class="progress-ring"></circle></svg>
+                                <span id="val-fact" class="absolute text-sm font-black text-emerald-600">0%</span>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4 rounded-3xl flex flex-col items-center">
+                            <span class="text-[10px] font-black text-slate-400 mb-3 uppercase">資訊幻覺</span>
+                            <div class="relative flex items-center justify-center">
+                                <svg class="w-16 h-16 -rotate-90"><circle cx="32" cy="32" r="28" stroke="#f1f5f9" stroke-width="6" fill="none"></circle><circle id="circle-hallu" cx="32" cy="32" r="28" stroke="#f59e0b" stroke-width="6" fill="none" stroke-dasharray="175.9" stroke-dashoffset="175.9" class="progress-ring"></circle></svg>
+                                <span id="val-hallu" class="absolute text-sm font-black text-orange-600">0%</span>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4 rounded-3xl flex flex-col items-center">
+                            <span class="text-[10px] font-black text-slate-400 mb-3 uppercase">誇大修飾</span>
+                            <div class="relative flex items-center justify-center">
+                                <svg class="w-16 h-16 -rotate-90"><circle cx="32" cy="32" r="28" stroke="#f1f5f9" stroke-width="6" fill="none"></circle><circle id="circle-embell" cx="32" cy="32" r="28" stroke="#a855f7" stroke-width="6" fill="none" stroke-dasharray="175.9" stroke-dashoffset="175.9" class="progress-ring"></circle></svg>
+                                <span id="val-embell" class="absolute text-sm font-black text-purple-600">0%</span>
+                            </div>
+                        </div>
+                        <div class="glass-card p-4 rounded-3xl flex flex-col items-center border-red-100">
+                            <span class="text-[10px] font-black text-red-400 mb-3 uppercase">詐騙風險</span>
+                            <div class="relative flex items-center justify-center">
+                                <svg class="w-16 h-16 -rotate-90"><circle cx="32" cy="32" r="28" stroke="#f1f5f9" stroke-width="6" fill="none"></circle><circle id="circle-scam" cx="32" cy="32" r="28" stroke="#ef4444" stroke-width="6" fill="none" stroke-dasharray="175.9" stroke-dashoffset="175.9" class="progress-ring"></circle></svg>
+                                <span id="val-scam" class="absolute text-sm font-black text-red-600">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Verdict -->
+                    <div class="glass-card rounded-3xl p-6 relative shadow-sm border-l-8 border-indigo-500 overflow-hidden">
+                        <div class="flex items-center gap-3 mb-4">
+                            <span id="risk-badge" class="verdict-badge verdict-low">低風險</span>
+                            <h3 class="text-lg font-black italic">專家鑑定報告</h3>
+                        </div>
+                        <p id="verdict-text" class="text-slate-600 leading-relaxed font-medium text-lg"></p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <section class="glass-card rounded-3xl p-6 shadow-sm">
+                            <h4 class="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2"><i data-lucide="scroll-text" class="w-4 h-4 text-indigo-500"></i> 分析邏輯日誌</h4>
+                            <div id="logic-list" class="space-y-2 text-sm"></div>
+                        </section>
+                        <section class="glass-card rounded-3xl p-6 shadow-sm border-red-50">
+                            <h4 class="text-[10px] font-black text-red-400 uppercase mb-4 flex items-center gap-2"><i data-lucide="skull" class="w-4 h-4 text-red-500"></i> 異常警示清單</h4>
+                            <div id="flag-list" class="space-y-2 text-sm text-red-600 font-medium"></div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- AI Inquiry Modal -->
+    <div id="ai-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-2xl rounded-3xl overflow-hidden modal-enter shadow-2xl">
+            <div class="gradient-header p-6 text-white flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="bot" class="w-6 h-6"></i>
+                    <h3 class="font-black text-lg">AI 深度風險診斷</h3>
+                </div>
+                <button onclick="closeAiModal()" class="p-1 hover:bg-white/20 rounded-lg transition-colors">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="p-8">
+                <div class="mb-6">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">針對項目</label>
+                    <div id="modal-flag-text" class="text-lg font-bold text-red-600 bg-red-50 p-4 rounded-2xl border border-red-100 italic"></div>
+                </div>
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">AI 回應建議</label>
+                    <div id="modal-ai-content" class="text-slate-600 leading-relaxed space-y-4 max-h-[40vh] overflow-y-auto pr-2">
+                        <!-- Content Loads Here -->
+                        <div class="flex flex-col items-center py-10 opacity-40">
+                            <i data-lucide="loader-2" class="w-8 h-8 animate-spin mb-4 text-indigo-500"></i>
+                            <p class="text-sm font-bold">正在連線至研判中心...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-8 flex justify-end">
+                    <button onclick="closeAiModal()" class="px-8 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black rounded-2xl transition-all">關閉診斷</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl transition-all translate-y-20 opacity-0 z-50 flex items-center gap-3 font-bold text-sm"></div>
+
+    <script type="module">
+        const APPS_SCRIPT_URL = ""; 
+
+        const ui = {
+            apiKeyInput: document.getElementById('api-key-input'),
+            saveKeyBtn: document.getElementById('save-key-btn'),
+            analyzeBtn: document.getElementById('analyze-btn'),
+            inputText: document.getElementById('input-text'),
+            inputUrl: document.getElementById('input-url'),
+            tabs: [document.getElementById('tab-text'), document.getElementById('tab-url'), document.getElementById('tab-history')],
+            panels: [document.getElementById('text-container'), document.getElementById('url-container'), document.getElementById('panel-history')],
+            views: {
+                empty: document.getElementById('empty-state'),
+                loading: document.getElementById('loading-state'),
+                dashboard: document.getElementById('result-dashboard')
+            },
+            rings: {
+                ai: document.getElementById('circle-ai'),
+                fact: document.getElementById('circle-fact'),
+                hallu: document.getElementById('circle-hallu'),
+                embell: document.getElementById('circle-embell'),
+                scam: document.getElementById('circle-scam')
+            },
+            vals: {
+                ai: document.getElementById('val-ai'),
+                fact: document.getElementById('val-fact'),
+                hallu: document.getElementById('val-hallu'),
+                embell: document.getElementById('val-embell'),
+                scam: document.getElementById('val-scam'),
+                verdict: document.getElementById('verdict-text'),
+                badge: document.getElementById('risk-badge'),
+                logic: document.getElementById('logic-list'),
+                flags: document.getElementById('flag-list')
+            },
+            syncToggle: document.getElementById('sync-drive-toggle'),
+            syncStatus: document.getElementById('sync-status'),
+            aiModal: document.getElementById('ai-modal')
+        };
+
+        lucide.createIcons();
+
+        let currentTab = 0;
+        let apiKey = localStorage.getItem('gemini_api_key_audit') || "";
+        ui.apiKeyInput.value = apiKey;
+
+        // Make functions globally accessible for inline onclick
+        window.openAiInquiry = openAiInquiry;
+        window.closeAiModal = () => ui.aiModal.classList.add('hidden');
+
+        ui.tabs.forEach((tab, idx) => {
+            tab.onclick = () => {
+                ui.tabs.forEach(t => t.classList.remove('tab-active', 'text-slate-400'));
+                tab.classList.add('tab-active');
+                ui.panels.forEach((p, pIdx) => p.classList.toggle('hidden', pIdx !== idx));
+                currentTab = idx;
+                if(idx === 2) loadHistory();
+            };
+        });
+
+        ui.saveKeyBtn.onclick = () => {
+            apiKey = ui.apiKeyInput.value.trim();
+            localStorage.setItem('gemini_api_key_audit', apiKey);
+            showToast("API Key 已安全儲存");
+        };
+
+        ui.analyzeBtn.onclick = async () => {
+            const input = currentTab === 0 ? ui.inputText.value.trim() : ui.inputUrl.value.trim();
+            if (!input) return showToast("請輸入欲分析之內容");
+            if (!apiKey) return showToast("請先設定 Gemini API Key");
+
+            setLoading(true);
+            try {
+                const result = await runAnalysis(input);
+                displayResults(result);
+                if (ui.syncToggle.checked) await syncToDrive(result);
+            } catch (err) {
+                showToast("分析引擎異常: " + err.message);
+                ui.views.loading.classList.add('hidden');
+                ui.views.empty.classList.remove('hidden');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        async function runAnalysis(text) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const systemPrompt = `你是一位專業的內容安全稽核員。分析使用者輸入內容，嚴格輸出 JSON：
+            { ai_rate, fact_score, hallucination_rate, embellishment_rate, scam_risk, verdict, risk_level, logic_steps[], red_flags[] }`;
+
+            const payload = {
+                contents: [{ parts: [{ text: `請分析內容：\n${text}` }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: { responseMimeType: "application/json" }
+            };
+
+            let lastError;
+            for (let i = 0; i < 5; i++) {
+                try {
+                    const response = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const data = await response.json();
+                    return JSON.parse(data.candidates[0].content.parts[0].text);
+                } catch (e) {
+                    lastError = e;
+                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+                }
+            }
+            throw lastError;
+        }
+
+        async function openAiInquiry(flagText) {
+            const modalContent = document.getElementById('modal-ai-content');
+            const modalFlag = document.getElementById('modal-flag-text');
+            
+            ui.aiModal.classList.remove('hidden');
+            modalFlag.innerText = flagText;
+            modalContent.innerHTML = `
+                <div class="flex flex-col items-center py-10 opacity-40">
+                    <i data-lucide="loader-2" class="w-8 h-8 animate-spin mb-4 text-indigo-500"></i>
+                    <p class="text-sm font-bold">AI 正在深層研判中...</p>
+                </div>
+            `;
+            lucide.createIcons();
+
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const prompt = `針對以下短視頻風險警示項目：「${flagText}」。
+                請以「專家角度」提供 200 字內的深入解釋，包含：
+                1. 為什麼這是風險？
+                2. 觀眾應該如何查證？
+                3. 給創作者或觀眾的具體建議。
+                請直接回覆繁體中文，並使用換行分隔段落。`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const data = await response.json();
+                const text = data.candidates[0].content.parts[0].text;
+                modalContent.innerHTML = text.split('\n').map(p => p ? `<p>${p}</p>` : '').join('');
+            } catch (e) {
+                modalContent.innerHTML = `<p class="text-red-500 font-bold">查詢失敗：${e.message}</p>`;
+            }
+        }
+
+        function setLoading(isLoading) {
+            ui.views.empty.classList.toggle('hidden', isLoading);
+            ui.views.loading.classList.toggle('hidden', !isLoading);
+            ui.views.dashboard.classList.toggle('hidden', isLoading);
+            ui.analyzeBtn.disabled = isLoading;
+        }
+
+        function displayResults(data) {
+            const updateRing = (el, val) => el.style.strokeDashoffset = 175.9 - (val / 100 * 175.9);
+            updateRing(ui.rings.ai, data.ai_rate);
+            updateRing(ui.rings.fact, data.fact_score);
+            updateRing(ui.rings.hallu, data.hallucination_rate);
+            updateRing(ui.rings.embell, data.embellishment_rate);
+            updateRing(ui.rings.scam, data.scam_risk);
+
+            ui.vals.ai.innerText = `${data.ai_rate}%`;
+            ui.vals.fact.innerText = `${data.fact_score}%`;
+            ui.vals.hallu.innerText = `${data.hallucination_rate}%`;
+            ui.vals.embell.innerText = `${data.embellishment_rate}%`;
+            ui.vals.scam.innerText = `${data.scam_risk}%`;
+
+            ui.vals.verdict.innerText = data.verdict;
+            ui.vals.badge.innerText = `${data.risk_level}風險`;
+            ui.vals.badge.className = `verdict-badge ${data.risk_level === '高' ? 'verdict-high' : data.risk_level === '中' ? 'verdict-mid' : 'verdict-low'}`;
+
+            ui.vals.logic.innerHTML = data.logic_steps.map(s => `<div class="p-3 bg-slate-50 rounded-xl border border-slate-100">● ${s}</div>`).join('');
+            ui.vals.flags.innerHTML = data.red_flags.map(f => `
+                <div class="p-3 bg-red-50 rounded-xl border border-red-100 flex items-center justify-between gap-2">
+                    <div class="flex items-start gap-2"><span>⚠️</span> ${f}</div>
+                    <button onclick="openAiInquiry('${f.replace(/'/g, "\\'")}')" class="flex-shrink-0 bg-white text-red-600 p-2 rounded-lg border border-red-200 hover:bg-red-600 hover:text-white transition-all group" title="AI 深入診斷">
+                        <i data-lucide="help-circle" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            const history = JSON.parse(localStorage.getItem('audit_history_v2') || '[]');
+            history.unshift({ ...data, timestamp: new Date().toLocaleString() });
+            localStorage.setItem('audit_history_v2', JSON.stringify(history.slice(0, 30)));
+            lucide.createIcons();
+        }
+
+        async function syncToDrive(data) {
+            if (!APPS_SCRIPT_URL) return;
+            ui.syncStatus.classList.remove('hidden');
+            try {
+                await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({ report: data, metadata: { owner: "edzhai066@gmail.com", source: "AI Insight V2.5.1" } })
+                });
+                showToast("同步成功：資料已存入雲端硬碟");
+            } catch (e) {
+                showToast("雲端同步失敗");
+            } finally {
+                ui.syncStatus.classList.add('hidden');
+            }
+        }
+
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('audit_history_v2') || '[]');
+            const list = document.getElementById('history-list');
+            if (history.length === 0) return list.innerHTML = `<div class="py-10 text-slate-300">目前尚無歷史記錄</div>`;
+            list.innerHTML = history.map(item => `
+                <div class="glass-card p-4 rounded-2xl border-l-4 ${item.risk_level === '高' ? 'border-red-500' : 'border-indigo-400'} mb-2 text-left">
+                    <div class="flex justify-between items-center text-[10px] font-bold mb-2">
+                        <span class="text-slate-400">${item.timestamp}</span>
+                        <span class="${item.risk_level === '高' ? 'text-red-500' : 'text-indigo-600'}">${item.risk_level}風險</span>
+                    </div>
+                    <p class="text-xs text-slate-600 line-clamp-2">${item.verdict}</p>
+                </div>
+            `).join('');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+        }
+    </script>
+</body>
+</html>
