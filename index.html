@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>短視頻分析戰情室 V2.5.1 - Google Drive 同步版</title>
+    <title>短視頻分析戰情室 V2.5.2 - 趨勢分析強化版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -37,7 +37,7 @@
                         <div class="bg-indigo-600 p-2 rounded-xl shadow-lg">
                             <i data-lucide="activity" class="w-6 h-6"></i>
                         </div>
-                        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight italic">AI INSIGHT <span class="text-indigo-400">V2.5.1</span></h1>
+                        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight italic">AI INSIGHT <span class="text-indigo-400">V2.5.2</span></h1>
                     </div>
                     <p class="text-indigo-200 text-sm font-medium opacity-80">目標雲端：edzhai066@gmail.com (Google Drive)</p>
                 </div>
@@ -63,7 +63,7 @@
                         <button id="tab-text" class="flex-1 py-3 text-xs font-black tab-active transition-all uppercase tracking-wider">文字分析</button>
                         <button id="tab-url" class="flex-1 py-3 text-xs font-black text-slate-400 uppercase tracking-wider">影片連結</button>
                         <button id="tab-history" class="flex-1 py-3 text-xs font-black text-slate-400 flex items-center justify-center gap-1 uppercase tracking-wider">
-                            <i data-lucide="history" class="w-3 h-3"></i>歷史
+                            <i data-lucide="history" class="w-3 h-3"></i>歷史趨勢
                         </button>
                     </div>
 
@@ -95,10 +95,36 @@
                         </div>
                     </div>
 
+                    <!-- Enhanced History Panel -->
                     <div id="panel-history" class="hidden space-y-4">
-                        <div id="history-list" class="max-h-[400px] overflow-y-auto space-y-2 pr-2 italic text-xs text-slate-400 text-center py-10">
+                        <div id="trend-summary" class="bg-indigo-900 text-white p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div class="relative z-10">
+                                <h4 class="text-[10px] font-black uppercase tracking-widest opacity-60 mb-3 flex items-center gap-2">
+                                    <i data-lucide="trending-up" class="w-3 h-3 text-indigo-400"></i> 近期趨勢 (Last 10)
+                                </h4>
+                                <div class="grid grid-cols-3 gap-2 text-center">
+                                    <div>
+                                        <div class="text-[10px] opacity-70 mb-1">AI 均值</div>
+                                        <div id="avg-ai-val" class="text-sm font-black">--</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-[10px] opacity-70 mb-1">事實均值</div>
+                                        <div id="avg-fact-val" class="text-sm font-black text-emerald-400">--</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-[10px] opacity-70 mb-1">詐騙風險</div>
+                                        <div id="avg-scam-val" class="text-sm font-black text-red-400">--</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="absolute -right-4 -bottom-4 opacity-10">
+                                <i data-lucide="bar-chart-3" class="w-20 h-20 text-white"></i>
+                            </div>
+                        </div>
+                        <div id="history-list" class="max-h-[350px] overflow-y-auto space-y-2 pr-2 italic text-xs text-slate-400 text-center py-10">
                             尚未有歷史紀錄
                         </div>
+                        <button id="clear-history-btn" class="w-full py-2 text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest">清除本機所有歷史</button>
                     </div>
                 </div>
             </div>
@@ -201,7 +227,6 @@
                 <div>
                     <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">AI 回應建議</label>
                     <div id="modal-ai-content" class="text-slate-600 leading-relaxed space-y-4 max-h-[40vh] overflow-y-auto pr-2">
-                        <!-- Content Loads Here -->
                         <div class="flex flex-col items-center py-10 opacity-40">
                             <i data-lucide="loader-2" class="w-8 h-8 animate-spin mb-4 text-indigo-500"></i>
                             <p class="text-sm font-bold">正在連線至研判中心...</p>
@@ -215,7 +240,6 @@
         </div>
     </div>
 
-    <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl transition-all translate-y-20 opacity-0 z-50 flex items-center gap-3 font-bold text-sm"></div>
 
     <script type="module">
@@ -254,7 +278,8 @@
             },
             syncToggle: document.getElementById('sync-drive-toggle'),
             syncStatus: document.getElementById('sync-status'),
-            aiModal: document.getElementById('ai-modal')
+            aiModal: document.getElementById('ai-modal'),
+            clearHistoryBtn: document.getElementById('clear-history-btn')
         };
 
         lucide.createIcons();
@@ -263,7 +288,6 @@
         let apiKey = localStorage.getItem('gemini_api_key_audit') || "";
         ui.apiKeyInput.value = apiKey;
 
-        // Make functions globally accessible for inline onclick
         window.openAiInquiry = openAiInquiry;
         window.closeAiModal = () => ui.aiModal.classList.add('hidden');
 
@@ -281,6 +305,14 @@
             apiKey = ui.apiKeyInput.value.trim();
             localStorage.setItem('gemini_api_key_audit', apiKey);
             showToast("API Key 已安全儲存");
+        };
+
+        ui.clearHistoryBtn.onclick = () => {
+            if(confirm("確定要清除所有本機歷史紀錄嗎？這不會影響雲端儲存的檔案。")) {
+                localStorage.removeItem('audit_history_v2');
+                loadHistory();
+                showToast("本機歷史已清除");
+            }
         };
 
         ui.analyzeBtn.onclick = async () => {
@@ -334,30 +366,15 @@
             
             ui.aiModal.classList.remove('hidden');
             modalFlag.innerText = flagText;
-            modalContent.innerHTML = `
-                <div class="flex flex-col items-center py-10 opacity-40">
-                    <i data-lucide="loader-2" class="w-8 h-8 animate-spin mb-4 text-indigo-500"></i>
-                    <p class="text-sm font-bold">AI 正在深層研判中...</p>
-                </div>
-            `;
+            modalContent.innerHTML = `<div class="flex flex-col items-center py-10 opacity-40"><i data-lucide="loader-2" class="w-8 h-8 animate-spin mb-4 text-indigo-500"></i><p class="text-sm font-bold">AI 正在深層研判中...</p></div>`;
             lucide.createIcons();
 
             try {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-                const prompt = `針對以下短視頻風險警示項目：「${flagText}」。
-                請以「專家角度」提供 200 字內的深入解釋，包含：
-                1. 為什麼這是風險？
-                2. 觀眾應該如何查證？
-                3. 給創作者或觀眾的具體建議。
-                請直接回覆繁體中文，並使用換行分隔段落。`;
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
+                const prompt = `針對項目：「${flagText}」。提供 200 字內深入解釋，包含風險原因、查證方式與建議。繁體中文。`;
+                const response = await fetch(url, { method: 'POST', body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
                 const data = await response.json();
-                const text = data.candidates[0].content.parts[0].text;
-                modalContent.innerHTML = text.split('\n').map(p => p ? `<p>${p}</p>` : '').join('');
+                modalContent.innerHTML = data.candidates[0].content.parts[0].text.split('\n').map(p => p ? `<p>${p}</p>` : '').join('');
             } catch (e) {
                 modalContent.innerHTML = `<p class="text-red-500 font-bold">查詢失敗：${e.message}</p>`;
             }
@@ -392,11 +409,8 @@
             ui.vals.flags.innerHTML = data.red_flags.map(f => `
                 <div class="p-3 bg-red-50 rounded-xl border border-red-100 flex items-center justify-between gap-2">
                     <div class="flex items-start gap-2"><span>⚠️</span> ${f}</div>
-                    <button onclick="openAiInquiry('${f.replace(/'/g, "\\'")}')" class="flex-shrink-0 bg-white text-red-600 p-2 rounded-lg border border-red-200 hover:bg-red-600 hover:text-white transition-all group" title="AI 深入診斷">
-                        <i data-lucide="help-circle" class="w-4 h-4"></i>
-                    </button>
-                </div>
-            `).join('');
+                    <button onclick="openAiInquiry('${f.replace(/'/g, "\\'")}')" class="flex-shrink-0 bg-white text-red-600 p-2 rounded-lg border border-red-200 hover:bg-red-600 hover:text-white transition-all"><i data-lucide="help-circle" class="w-4 h-4"></i></button>
+                </div>`).join('');
 
             const history = JSON.parse(localStorage.getItem('audit_history_v2') || '[]');
             history.unshift({ ...data, timestamp: new Date().toLocaleString() });
@@ -411,9 +425,9 @@
                 await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'no-cors',
-                    body: JSON.stringify({ report: data, metadata: { owner: "edzhai066@gmail.com", source: "AI Insight V2.5.1" } })
+                    body: JSON.stringify({ report: data, metadata: { owner: "edzhai066@gmail.com", source: "AI Insight V2.5.2" } })
                 });
-                showToast("同步成功：資料已存入雲端硬碟");
+                showToast("同步成功");
             } catch (e) {
                 showToast("雲端同步失敗");
             } finally {
@@ -424,12 +438,32 @@
         function loadHistory() {
             const history = JSON.parse(localStorage.getItem('audit_history_v2') || '[]');
             const list = document.getElementById('history-list');
+            
+            // Calculate Stats
+            if (history.length > 0) {
+                const last10 = history.slice(0, 10);
+                const avg = (key) => (last10.reduce((acc, curr) => acc + curr[key], 0) / last10.length).toFixed(1);
+                
+                document.getElementById('avg-ai-val').innerText = `${avg('ai_rate')}%`;
+                document.getElementById('avg-fact-val').innerText = `${avg('fact_score')}%`;
+                document.getElementById('avg-scam-val').innerText = `${avg('scam_risk')}%`;
+            } else {
+                document.getElementById('avg-ai-val').innerText = "--";
+                document.getElementById('avg-fact-val').innerText = "--";
+                document.getElementById('avg-scam-val').innerText = "--";
+            }
+
             if (history.length === 0) return list.innerHTML = `<div class="py-10 text-slate-300">目前尚無歷史記錄</div>`;
+            
             list.innerHTML = history.map(item => `
                 <div class="glass-card p-4 rounded-2xl border-l-4 ${item.risk_level === '高' ? 'border-red-500' : 'border-indigo-400'} mb-2 text-left">
                     <div class="flex justify-between items-center text-[10px] font-bold mb-2">
                         <span class="text-slate-400">${item.timestamp}</span>
                         <span class="${item.risk_level === '高' ? 'text-red-500' : 'text-indigo-600'}">${item.risk_level}風險</span>
+                    </div>
+                    <div class="flex gap-2 mb-2">
+                        <span class="text-[9px] px-2 py-0.5 bg-slate-100 rounded text-slate-500">AI: ${item.ai_rate}%</span>
+                        <span class="text-[9px] px-2 py-0.5 bg-slate-100 rounded text-slate-500">Fact: ${item.fact_score}%</span>
                     </div>
                     <p class="text-xs text-slate-600 line-clamp-2">${item.verdict}</p>
                 </div>
